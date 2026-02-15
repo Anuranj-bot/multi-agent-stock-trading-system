@@ -1,46 +1,104 @@
 import functools
-import time
-import json
 
 
 def create_trader(llm, memory):
-    def trader_node(state, name):
-        company_name = state["company_of_interest"]
-        investment_plan = state["investment_plan"]
-        market_research_report = state["market_report"]
-        sentiment_report = state["sentiment_report"]
-        news_report = state["news_report"]
-        fundamentals_report = state["fundamentals_report"]
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
+    # -------------------------
+    # Utility to trim long text
+    # -------------------------
+    def trim(text, max_chars=3000):
+        if not text:
+            return ""
+        return text[-max_chars:]  # keep most recent part only
+
+    def trader_node(state, name):
+
+        company_name = state.get("company_of_interest", "")
+        investment_plan = trim(state.get("investment_plan", ""), 2500)
+
+        # Trim large research reports
+        market_research_report = trim(state.get("market_report", ""), 2000)
+        sentiment_report = trim(state.get("sentiment_report", ""), 1500)
+        news_report = trim(state.get("news_report", ""), 1500)
+        fundamentals_report = trim(state.get("fundamentals_report", ""), 2000)
+
+        # -------------------------
+        # Memory handling (safe)
+        # -------------------------
+        curr_situation = (
+            market_research_report
+            + "\n\n"
+            + sentiment_report
+            + "\n\n"
+            + news_report
+            + "\n\n"
+            + fundamentals_report
+        )
 
         past_memory_str = ""
-        if past_memories:
-            for i, rec in enumerate(past_memories, 1):
-                past_memory_str += rec["recommendation"] + "\n\n"
-        else:
-            past_memory_str = "No past memories found."
 
-        context = {
-            "role": "user",
-            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
-        }
+        try:
+            past_memories = memory.get_memories(curr_situation, n_matches=1)
 
+            if past_memories and isinstance(past_memories, list):
+                for rec in past_memories:
+                    if isinstance(rec, dict) and "recommendation" in rec:
+                        past_memory_str += trim(rec["recommendation"], 1000) + "\n\n"
+        except Exception:
+            past_memory_str = ""
+
+        if not past_memory_str:
+            past_memory_str = "No significant past lessons available."
+
+        # -------------------------
+        # Build compact prompt
+        # -------------------------
         messages = [
             {
                 "role": "system",
-                "content": f"""You are a trading agent analyzing market data to make investment decisions. Based on your analysis, provide a specific recommendation to buy, sell, or hold. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**' to confirm your recommendation. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
+                "content": f"""
+You are a professional trading decision agent.
+
+Your task:
+- Review the proposed investment plan.
+- Consider trimmed research context.
+- Learn from past mistakes.
+- Make a decisive call: BUY, SELL, or HOLD.
+
+Rules:
+- Be concise but strategic.
+- Avoid unnecessary repetition.
+- End your response with:
+FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**
+
+Past Lessons:
+{past_memory_str}
+""",
             },
-            context,
+            {
+                "role": "user",
+                "content": f"""
+Company: {company_name}
+
+Proposed Investment Plan:
+{investment_plan}
+
+Recent Market Highlights:
+- Market: {market_research_report}
+- Sentiment: {sentiment_report}
+- News: {news_report}
+- Fundamentals: {fundamentals_report}
+
+Make your final trading decision.
+""",
+            },
         ]
 
+        # -------------------------
+        # Call LLM
         result = llm.invoke(messages)
-
         return {
-            "messages": [result],
             "trader_investment_plan": result.content,
             "sender": name,
         }
-
     return functools.partial(trader_node, name="Trader")

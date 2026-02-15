@@ -1,55 +1,96 @@
-import time
-import json
+# ===============================
+# SAFE IMPORTS
+# ===============================
+from tradingagents.agents.utils.safety import trim, safe_get, safe_memory_extract
 
+
+# ===============================
+# RESEARCH MANAGER (SAFE VERSION)
+# ===============================
 
 def create_research_manager(llm, memory):
+
     def research_manager_node(state) -> dict:
-        history = state["investment_debate_state"].get("history", "")
-        market_research_report = state["market_report"]
-        sentiment_report = state["sentiment_report"]
-        news_report = state["news_report"]
-        fundamentals_report = state["fundamentals_report"]
 
-        investment_debate_state = state["investment_debate_state"]
+        # --------------------------------
+        # SAFE STATE EXTRACTION
+        # --------------------------------
+        investment_debate_state = safe_get(state, "investment_debate_state", {})
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
-        past_memories = memory.get_memories(curr_situation, n_matches=2)
+        history = trim(safe_get(investment_debate_state, "history", ""), 3000)
+        bull_history = safe_get(investment_debate_state, "bull_history", "")
+        bear_history = safe_get(investment_debate_state, "bear_history", "")
+        count = safe_get(investment_debate_state, "count", 0)
 
-        past_memory_str = ""
-        for i, rec in enumerate(past_memories, 1):
-            past_memory_str += rec["recommendation"] + "\n\n"
+        # --------------------------------
+        # SAFE REPORT EXTRACTION
+        # --------------------------------
+        market_research_report = trim(safe_get(state, "market_report", ""), 1500)
+        sentiment_report = trim(safe_get(state, "sentiment_report", ""), 1200)
+        news_report = trim(safe_get(state, "news_report", ""), 1200)
+        fundamentals_report = trim(safe_get(state, "fundamentals_report", ""), 1500)
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+        curr_situation = (
+            market_research_report
+            + "\n\n"
+            + sentiment_report
+            + "\n\n"
+            + news_report
+            + "\n\n"
+            + fundamentals_report
+        )
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+        # --------------------------------
+        # SAFE MEMORY EXTRACTION
+        # --------------------------------
+        try:
+            past_memories_raw = memory.get_memories(curr_situation, n_matches=2)
+            past_memory_str = safe_memory_extract(past_memories_raw, 800)
+        except Exception:
+            past_memory_str = ""
 
-Additionally, develop a detailed investment plan for the trader. This should include:
+        # --------------------------------
+        # CONTROLLED PROMPT
+        # --------------------------------
+        prompt = f"""
+You are the Research Manager.
 
-Your Recommendation: A decisive stance supported by the most convincing arguments.
-Rationale: An explanation of why these arguments lead to your conclusion.
-Strategic Actions: Concrete steps for implementing the recommendation.
-Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 
+Your job:
+1. Briefly summarize the strongest bull argument.
+2. Briefly summarize the strongest bear argument.
+3. Make a clear decision: BUY, SELL, or HOLD.
+4. Provide a short actionable investment plan.
 
-Here are your past reflections on mistakes:
-\"{past_memory_str}\"
+Be decisive.
+Do NOT default to HOLD unless strongly justified.
+Keep response concise but strategic.
 
-Here is the debate:
 Debate History:
-{history}"""
+{history}
+
+Lessons from past similar trades:
+{past_memory_str}
+"""
+
         response = llm.invoke(prompt)
 
-        new_investment_debate_state = {
-            "judge_decision": response.content,
-            "history": investment_debate_state.get("history", ""),
-            "bear_history": investment_debate_state.get("bear_history", ""),
-            "bull_history": investment_debate_state.get("bull_history", ""),
-            "current_response": response.content,
-            "count": investment_debate_state["count"],
+        final_decision_text = trim(response.content, 2000)
+
+        # --------------------------------
+        # SAFE STATE UPDATE
+        # --------------------------------
+        new_state = {
+            "judge_decision": final_decision_text,
+            "history": history,
+            "bull_history": bull_history,
+            "bear_history": bear_history,
+            "current_response": final_decision_text,
+            "count": count,
         }
 
         return {
-            "investment_debate_state": new_investment_debate_state,
-            "investment_plan": response.content,
+            "investment_debate_state": new_state,
+            "investment_plan": final_decision_text,
         }
 
     return research_manager_node

@@ -1,31 +1,58 @@
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.dataflows.selector import select_nifty50_company
 
-from dotenv import load_dotenv
+# =========================
+# STEP 1: Build SAFE config
+# =========================
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Create a custom config
 config = DEFAULT_CONFIG.copy()
-config["deep_think_llm"] = "gpt-4o-mini"  # Use a different model
-config["quick_think_llm"] = "gpt-4o-mini"  # Use a different model
-config["max_debate_rounds"] = 1  # Increase debate rounds
 
-# Configure data vendors (default uses yfinance and alpha_vantage)
+# Force FREE + LOCAL LLM (Ollama)
+config["llm_provider"] = "ollama"
+config["backend_url"] = "http://localhost:11434"
+config["deep_think_llm"] = "llama3"
+config["quick_think_llm"] = "llama3"
+
+# Required directories
+config["project_dir"] = "."
+config["data_dir"] = "./data"
+
+# Reduce load (important)
+config["max_debate_rounds"] = 1
+config["enable_reflection"] = False
+
+# FREE data sources only
 config["data_vendors"] = {
-    "core_stock_apis": "yfinance",           # Options: yfinance, alpha_vantage, local
-    "technical_indicators": "yfinance",      # Options: yfinance, alpha_vantage, local
-    "fundamental_data": "alpha_vantage",     # Options: openai, alpha_vantage, local
-    "news_data": "alpha_vantage",            # Options: openai, alpha_vantage, google, local
+    "core_stock_apis": "yfinance",
+    "technical_indicators": "yfinance",
+    "fundamental_data": "yfinance",
+    "news_data": "google",
 }
 
-# Initialize with custom config
-ta = TradingAgentsGraph(debug=True, config=config)
+# =========================
+# STEP 2: Initialize system
+# =========================
 
-# forward propagate
-_, decision = ta.propagate("NVDA", "2024-05-10")
+ta = TradingAgentsGraph(
+    debug=True,
+    config=config
+)
+
+# =========================
+# STEP 3: Select company
+# =========================
+
+company = select_nifty50_company()
+
+# =========================
+# STEP 4: Run agents
+# =========================
+
+state, decision = ta.propagate(
+    company_name=company,
+    trade_date="2024-05-10"
+)
+
+print("\n================ FINAL DECISION ================\n")
 print(decision)
-
-# Memorize mistakes and reflect
-# ta.reflect_and_remember(1000) # parameter is the position returns

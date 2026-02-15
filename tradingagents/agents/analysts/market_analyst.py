@@ -68,7 +68,7 @@ Volume-Based Indicators:
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(ticker=ticker)
 
-        chain = prompt | llm.bind_tools(tools)
+        chain = prompt | llm
 
         result = chain.invoke(state["messages"])
 
