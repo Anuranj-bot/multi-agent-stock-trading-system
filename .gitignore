@@ -1,6 +1,7 @@
 .venv
 results
 env/
+patchtst-venv/
 __pycache__/
 .DS_Store
 *.csv
