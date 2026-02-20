@@ -1,28 +1,35 @@
+import copy
+import os
+from datetime import datetime
+
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.dataflows.selector import select_nifty50_company
 
-# =========================
-# STEP 1: Build SAFE config
-# =========================
 
-config = DEFAULT_CONFIG.copy()
+# ======================================================
+# STEP 1: SAFE CONFIG (DEEP COPY)
+# ======================================================
 
-# Force FREE + LOCAL LLM (Ollama)
+config = copy.deepcopy(DEFAULT_CONFIG)
+
+# ----- FORCE FREE + LOCAL LLM (OLLAMA) -----
 config["llm_provider"] = "ollama"
 config["backend_url"] = "http://localhost:11434"
 config["deep_think_llm"] = "llama3"
 config["quick_think_llm"] = "llama3"
 
-# Required directories
+# ----- PROJECT PATHS -----
 config["project_dir"] = "."
-config["data_dir"] = "./data"
+config["data_dir"] = "dataflows/data_cache"
 
-# Reduce load (important)
+os.makedirs(config["data_dir"], exist_ok=True)
+
+# ----- PERFORMANCE SETTINGS -----
 config["max_debate_rounds"] = 1
 config["enable_reflection"] = False
 
-# FREE data sources only
+# ----- FREE DATA SOURCES -----
 config["data_vendors"] = {
     "core_stock_apis": "yfinance",
     "technical_indicators": "yfinance",
@@ -30,29 +37,59 @@ config["data_vendors"] = {
     "news_data": "google",
 }
 
-# =========================
-# STEP 2: Initialize system
-# =========================
+
+# ======================================================
+# STEP 2: INITIALIZE SYSTEM
+# ======================================================
 
 ta = TradingAgentsGraph(
-    debug=True,
+    debug=True,  # set False in production
     config=config
 )
 
-# =========================
-# STEP 3: Select company
-# =========================
+
+# ======================================================
+# STEP 3: SELECT COMPANY
+# ======================================================
 
 company = select_nifty50_company()
 
-# =========================
-# STEP 4: Run agents
-# =========================
+print(f"\nSelected Company: {company}\n")
 
-state, decision = ta.propagate(
-    company_name=company,
-    trade_date="2024-05-10"
-)
 
-print("\n================ FINAL DECISION ================\n")
-print(decision)
+# ======================================================
+# STEP 4: RUN AGENTS
+# ======================================================
+
+today = datetime.today().strftime("%Y-%m-%d")
+
+try:
+    state, decision = ta.propagate(
+        company_name=company,
+        trade_date=today
+    )
+
+    print("\n================ FINAL DECISION ================\n")
+    print(decision)
+
+except Exception as e:
+    print("\n❌ Error running trading agents:")
+    print(str(e))
+    decision = "Execution failed."
+
+
+# ======================================================
+# STEP 5: OPTIONAL BACKEND READY OUTPUT
+# ======================================================
+
+# If your backend friend wants JSON output,
+# you can return something like this:
+
+final_output = {
+    "company": company,
+    "trade_date": today,
+    "decision": decision,
+}
+
+print("\n================ JSON OUTPUT ================\n")
+print(final_output)

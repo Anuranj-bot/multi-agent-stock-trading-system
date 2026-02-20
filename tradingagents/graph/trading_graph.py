@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
-
 from langchain_community.chat_models import ChatOllama
 
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -17,19 +16,6 @@ from tradingagents.agents.utils.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
-)
-
-from tradingagents.agents.utils.agent_utils import (
-    get_stock_data,
-    get_indicators,
-    get_fundamentals,
-    get_balance_sheet,
-    get_cashflow,
-    get_income_statement,
-    get_news,
-    get_global_news,
-    get_insider_sentiment,
-    get_insider_transactions,
 )
 
 from .conditional_logic import ConditionalLogic
@@ -86,17 +72,13 @@ class TradingAgentsGraph:
         )
 
         # ----------------------------------
-        # MEMORY (LOCAL / CHROMADB)
+        # MEMORY
         # ----------------------------------
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
         self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
         self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
         self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
-
-        # ----------------------------------
-        # TOOLS
-        # ----------------------------------
 
         # ----------------------------------
         # GRAPH COMPONENTS
@@ -126,18 +108,31 @@ class TradingAgentsGraph:
         self.graph = self.graph_setup.setup_graph(selected_analysts)
 
     # ==================================================
-    # TOOL NODES
+    # SAFE SERIALIZATION
     # ==================================================
-   
+    def _serialize_state(self, obj):
+        """
+        Recursively convert LangChain message objects
+        into JSON serializable structures.
+        """
+
+        if isinstance(obj, list):
+            return [self._serialize_state(item) for item in obj]
+
+        if isinstance(obj, dict):
+            return {k: self._serialize_state(v) for k, v in obj.items()}
+
+        # Convert LangChain messages
+        if hasattr(obj, "content"):
+            return obj.content
+
+        return obj
+
     # ==================================================
     # RUN GRAPH
     # ==================================================
     def propagate(self, company_name: str, trade_date: str):
-        """
-        Run the trading agents graph
-        """
 
-        # Validate + normalize NIFTY ticker
         self.ticker = validate_nifty50_symbol(company_name)
 
         init_state = self.propagator.create_initial_state(
@@ -159,13 +154,14 @@ class TradingAgentsGraph:
         self._log_state(trade_date, final_state)
 
         return final_state, self.process_signal(
-            final_state["final_trade_decision"]
+            final_state.get("final_trade_decision", "")
         )
 
     # ==================================================
     # LOGGING
     # ==================================================
     def _log_state(self, trade_date, final_state):
+
         self.log_states_dict[str(trade_date)] = final_state
 
         out_dir = Path(
@@ -173,10 +169,12 @@ class TradingAgentsGraph:
         )
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        safe_state = self._serialize_state(self.log_states_dict)
+
         with open(
             out_dir / f"full_states_log_{trade_date}.json", "w"
         ) as f:
-            json.dump(self.log_states_dict, f, indent=2)
+            json.dump(safe_state, f, indent=2)
 
     # ==================================================
     # LEARNING
