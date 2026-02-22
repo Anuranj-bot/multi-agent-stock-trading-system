@@ -10,3 +10,6 @@ eval_results/
 eval_data/
 *.egg-info/
 .env
+*.pyc
+*.pyo
+*.pyd   
