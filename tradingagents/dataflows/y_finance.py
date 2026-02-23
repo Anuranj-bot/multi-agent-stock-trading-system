@@ -1,55 +1,53 @@
 from typing import Annotated
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-import yfinance as yf
 import os
 import pandas as pd
 from stockstats import wrap
 from .stockstats_utils import StockstatsUtils
 from .config import get_config
-
+from tradingagents.db import get_connection
 
 # =========================================================
 # LIVE YFINANCE DATA (SAFE + DYNAMIC)
 # =========================================================
-
+    
 def get_YFin_data_online(symbol, start_date, end_date):
     """
-    Fetch live stock price data using yfinance.
-    Returns DataFrame or error string.
+    Fetch stock data from TimescaleDB instead of yfinance.
     """
 
     try:
-        datetime.strptime(start_date, "%Y-%m-%d")
-        datetime.strptime(end_date, "%Y-%m-%d")
-    except ValueError:
-        return "Invalid date format. Use YYYY-MM-DD"
+        conn = get_connection()
+        cur = conn.cursor()
 
-    try:
-        data = yf.download(
-            symbol.upper(),
-            start=start_date,
-            end=end_date,
-            progress=False,
-            auto_adjust=True,
-        )
+        query = """
+            SELECT time, open, high, low, close
+            FROM stock_data
+            WHERE symbol = %s
+            AND time BETWEEN %s AND %s
+            ORDER BY time ASC;
+        """
 
-        if data.empty:
+        cur.execute(query, (symbol.upper(), start_date, end_date))
+
+        rows = cur.fetchall()
+
+        if not rows:
             return f"No data found for symbol '{symbol}'"
 
-        data.reset_index(inplace=True)
+        # Convert to DataFrame
+        import pandas as pd
 
-        # Normalize Date column
-        if "Date" not in data.columns:
-            if "Datetime" in data.columns:
-                data.rename(columns={"Datetime": "Date"}, inplace=True)
-            else:
-                data.rename(columns={data.columns[0]: "Date"}, inplace=True)
+        df = pd.DataFrame(rows, columns=["Date", "Open", "High", "Low", "Close"])
 
-        return data
+        cur.close()
+        conn.close()
+
+        return df
 
     except Exception as e:
-        return f"Error fetching stock data: {str(e)}"
+        return f"Database fetch error: {str(e)}"
 
 
 # =========================================================
