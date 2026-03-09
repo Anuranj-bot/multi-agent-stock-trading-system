@@ -1,6 +1,7 @@
 import copy
 import os
 from datetime import datetime
+from tradingagents.database.db_service import fetch_pending_request
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
@@ -16,8 +17,8 @@ config = copy.deepcopy(DEFAULT_CONFIG)
 # ----- FORCE FREE + LOCAL LLM (OLLAMA) -----
 config["llm_provider"] = "ollama"
 config["backend_url"] = "http://localhost:11434"
-config["deep_think_llm"] = "llama3"
-config["quick_think_llm"] = "llama3"
+config["deep_think_llm"] = "phi3:latest"
+config["quick_think_llm"] = "phi3:latest"
 
 # ----- PROJECT PATHS -----
 config["project_dir"] = "."
@@ -73,7 +74,7 @@ try:
     print(decision)
 
 except Exception as e:
-    print("\n❌ Error running trading agents:")
+    print("\n Error running trading agents:")
     print(str(e))
     decision = "Execution failed."
 

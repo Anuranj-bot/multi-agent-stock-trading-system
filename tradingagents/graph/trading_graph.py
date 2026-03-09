@@ -24,6 +24,9 @@ from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
 
+# 🔹 DATABASE
+from tradingagents.database.db_service import save_agent_output
+
 
 class TradingAgentsGraph:
     """
@@ -111,10 +114,6 @@ class TradingAgentsGraph:
     # SAFE SERIALIZATION
     # ==================================================
     def _serialize_state(self, obj):
-        """
-        Recursively convert LangChain message objects
-        into JSON serializable structures.
-        """
 
         if isinstance(obj, list):
             return [self._serialize_state(item) for item in obj]
@@ -122,34 +121,87 @@ class TradingAgentsGraph:
         if isinstance(obj, dict):
             return {k: self._serialize_state(v) for k, v in obj.items()}
 
-        # Convert LangChain messages
         if hasattr(obj, "content"):
             return obj.content
 
         return obj
 
     # ==================================================
-    # RUN GRAPH
+    # RUN GRAPH (STREAMING + REAL TIME DB SAVE)
     # ==================================================
     def propagate(self, company_name: str, trade_date: str):
 
         self.ticker = validate_nifty50_symbol(company_name)
 
         init_state = self.propagator.create_initial_state(
-            self.ticker, trade_date
+            self.ticker,
+            trade_date,
         )
+
         args = self.propagator.get_graph_args()
 
-        if self.debug:
-            trace = []
-            for chunk in self.graph.stream(init_state, **args):
-                if chunk.get("messages"):
-                    chunk["messages"][-1].pretty_print()
-                trace.append(chunk)
-            final_state = trace[-1]
-        else:
-            final_state = self.graph.invoke(init_state, **args)
+        saved_flags = {
+            "market": False,
+            "fundamentals": False,
+            "news": False,
+            "social": False,
+        }
 
+        final_state = None
+
+        for chunk in self.graph.stream(init_state, **args):
+
+            final_state = chunk
+
+            # -----------------------------
+            # MARKET REPORT
+            # -----------------------------
+            if chunk.get("market_report") and not saved_flags["market"]:
+                save_agent_output(
+                    self.ticker,
+                    trade_date,
+                    "market",
+                    chunk["market_report"],
+                )
+                saved_flags["market"] = True
+
+            # -----------------------------
+            # FUNDAMENTALS REPORT
+            # -----------------------------
+            if chunk.get("fundamentals_report") and not saved_flags["fundamentals"]:
+                save_agent_output(
+                    self.ticker,
+                    trade_date,
+                    "fundamentals",
+                    chunk["fundamentals_report"],
+                )
+                saved_flags["fundamentals"] = True
+
+            # -----------------------------
+            # NEWS REPORT
+            # -----------------------------
+            if chunk.get("news_report") and not saved_flags["news"]:
+                save_agent_output(
+                    self.ticker,
+                    trade_date,
+                    "news",
+                    chunk["news_report"],
+                )
+                saved_flags["news"] = True
+
+            # -----------------------------
+            # SOCIAL / SENTIMENT REPORT
+            # -----------------------------
+            if chunk.get("sentiment_report") and not saved_flags["social"]:
+                save_agent_output(
+                    self.ticker,
+                    trade_date,
+                    "social",
+                    chunk["sentiment_report"],
+                )
+                saved_flags["social"] = True
+
+        # SAVE FINAL STATE
         self.curr_state = final_state
         self._log_state(trade_date, final_state)
 
@@ -180,18 +232,23 @@ class TradingAgentsGraph:
     # LEARNING
     # ==================================================
     def reflect_and_remember(self, returns_losses):
+
         self.reflector.reflect_bull_researcher(
             self.curr_state, returns_losses, self.bull_memory
         )
+
         self.reflector.reflect_bear_researcher(
             self.curr_state, returns_losses, self.bear_memory
         )
+
         self.reflector.reflect_trader(
             self.curr_state, returns_losses, self.trader_memory
         )
+
         self.reflector.reflect_invest_judge(
             self.curr_state, returns_losses, self.invest_judge_memory
         )
+
         self.reflector.reflect_risk_manager(
             self.curr_state, returns_losses, self.risk_manager_memory
         )
