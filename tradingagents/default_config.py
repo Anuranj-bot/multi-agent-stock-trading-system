@@ -11,8 +11,8 @@ DEFAULT_CONFIG = {
     "backend_url": "http://localhost:11434",
 
     # Use phi3 for speed
-    "deep_think_llm": "llama-3.1-70b-versatile",
-    "quick_think_llm": "llama-3.1-8b-instant",
+    "deep_think_llm": "meta-llama/llama-4-scout-17b-16e-instruct",
+    "quick_think_llm": "meta-llama/llama-4-scout-17b-16e-instruct",
 
     # ======================
     # DATA DIRECTORY

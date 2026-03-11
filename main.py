@@ -17,8 +17,8 @@ config = copy.deepcopy(DEFAULT_CONFIG)
 # ----- FORCE FREE + LOCAL LLM (OLLAMA) -----
 config["llm_provider"] = "groq"
 config["backend_url"] = "http://localhost:11434"
-config["deep_think_llm"] = "llama-3.1-70b-versatile"
-config["quick_think_llm"] = "llama-3.1-8b-instant"
+config["deep_think_llm"] = "meta-llama/llama-4-scout-17b-16e-instruct"
+config["quick_think_llm"] = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 # ----- PROJECT PATHS -----
 config["project_dir"] = "."
