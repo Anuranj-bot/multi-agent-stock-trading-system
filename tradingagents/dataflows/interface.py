@@ -1,7 +1,6 @@
 from typing import Annotated
 from tradingagents.dataflows.nifty50 import normalize_nifty_symbol
 
-
 # ---------------------------------------------------------
 # Import vendor implementations
 # ---------------------------------------------------------
@@ -54,7 +53,7 @@ TOOLS_CATEGORIES = {
         ],
     },
     "news_data": {
-        "description": "News (public/insiders, original/processed)",
+        "description": "News data sources",
         "tools": [
             "get_news",
             "get_global_news",
@@ -99,12 +98,13 @@ VENDOR_METHODS = {
         "local": get_simfin_income_statements,
     },
 
+    # -----------------------------------------------------
+    # NEWS
+    # -----------------------------------------------------
+
     "get_news": {
         "google": get_google_news,
-        "local": [
-            get_google_news,
-            get_reddit_company_news,
-        ],
+        "local": get_reddit_company_news,
     },
 
     "get_global_news": {
@@ -232,9 +232,10 @@ def route_to_vendor(method: str, *args, **kwargs):
             try:
 
                 result = impl(*args, **kwargs)
-                results.append(result)
 
-                # If only one vendor configured → return immediately
+                if result:
+                    results.append(result)
+
                 if len(primary_vendors) == 1:
                     return result
 
@@ -243,9 +244,12 @@ def route_to_vendor(method: str, *args, **kwargs):
                 print(f"Vendor implementation failed: {e}")
                 continue
 
-    if not results:
-        raise RuntimeError(
-            f"All vendor implementations failed for method '{method}'"
-        )
+    # -----------------------------------------------------
+    # Safe fallback (prevents pipeline crash)
+    # -----------------------------------------------------
 
-    return results[0] if len(results) == 1 else "\n".join(map(str, results))
+    if not results:
+        print(f"[WARNING] No data returned for method '{method}'")
+        return ""
+
+    return results[0] if len(results) == 1 else "\n".join(map(str, results)) 

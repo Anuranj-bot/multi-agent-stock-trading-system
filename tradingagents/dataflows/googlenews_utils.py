@@ -31,12 +31,13 @@ def make_request(url, headers):
     return response
 
 
-def getNewsData(query, start_date, end_date):
+def getNewsData(query, start_date, end_date, limit=10):
     """
     Scrape Google News search results for a given query and date range.
     query: str - search query
     start_date: str - start date in the format yyyy-mm-dd or mm/dd/yyyy
     end_date: str - end date in the format yyyy-mm-dd or mm/dd/yyyy
+    limit: int - maximum number of news articles to return (default: 10)
     """
     if "-" in start_date:
         start_date = datetime.strptime(start_date, "%Y-%m-%d")
@@ -87,6 +88,8 @@ def getNewsData(query, start_date, end_date):
                             "source": source,
                         }
                     )
+                    if len(news_results) >= limit:
+                        break
                 except Exception as e:
                     print(f"Error processing result: {e}")
                     # If one of the fields is not found, skip this result
@@ -100,6 +103,8 @@ def getNewsData(query, start_date, end_date):
                 break
 
             page += 1
+            if len(news_results) >= limit:
+                break
 
         except Exception as e:
             print(f"Failed after multiple retries: {e}")

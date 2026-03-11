@@ -1,41 +1,67 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from tradingagents.agents.utils.agent_utils import (
+    get_insider_sentiment,
+    get_insider_transactions
+)
 
 
 def create_social_media_analyst(llm):
 
     def social_media_analyst_node(state):
+
         current_date = state["trade_date"]
         ticker = state["company_of_interest"]
 
-        system_message = (
-            """You are a social media and public sentiment analyst.
+        # Fetch insider sentiment
+        insider_sentiment = get_insider_sentiment.invoke({
+            "ticker": ticker,
+            "curr_date": current_date
+        })
 
-Your task:
-- Analyze public sentiment, social media discussions, and company-related buzz
-- Infer investor psychology, hype, fear, optimism, or skepticism
-- Highlight narrative trends (retail enthusiasm, fear, controversy, speculation)
-- Explain how sentiment may affect short-term volatility and momentum
+        # Fetch insider transactions
+        insider_transactions = get_insider_transactions.invoke({
+            "ticker": ticker,
+            "curr_date": current_date
+        })
 
-Guidelines:
-- Be detailed and structured
-- Avoid vague statements like "sentiment is mixed"
-- Clearly distinguish bullish vs bearish sentiment drivers
-- End with a Markdown table summarizing sentiment signals and trading implications
+        system_message = """
+You are a market sentiment analyst.
 
-Do NOT mention tools, APIs, or data sources.
+Analyze insider sentiment and transaction data.
+
+Focus on:
+• insider buying vs selling
+• sentiment shifts
+• executive confidence
+• institutional signals
+
+Explain how this sentiment could influence market perception and trading behavior.
+
+End with a Markdown table summarizing sentiment signals.
 """
-        )
 
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
                     "system",
                     system_message
-                    + f"\nCurrent date: {current_date}\n"
-                    + f"Company of interest: {ticker}",
+                    + "\nCurrent date: {current_date}"
+                    + "\nCompany: {ticker}"
+                ),
+                (
+                    "human",
+                    "Insider Sentiment:\n{insider_sentiment}\n\n"
+                    "Insider Transactions:\n{insider_transactions}"
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
+        )
+
+        prompt = prompt.partial(
+            current_date=current_date,
+            ticker=ticker,
+            insider_sentiment=insider_sentiment,
+            insider_transactions=insider_transactions
         )
 
         chain = prompt | llm

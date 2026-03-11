@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
-from langchain_community.chat_models import ChatOllama
+from langchain_groq import ChatGroq
 
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.dataflows.config import set_config
@@ -24,14 +24,14 @@ from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
 
-# 🔹 DATABASE
+# DATABASE
 from tradingagents.database.db_service import save_agent_output
 
 
 class TradingAgentsGraph:
     """
     MAIN orchestration class.
-    FREE MODE: OLLAMA ONLY.
+    GROQ ONLY VERSION
     """
 
     def __init__(
@@ -54,38 +54,47 @@ class TradingAgentsGraph:
         )
 
         # ----------------------------------
-        # LLM (OLLAMA ONLY)
+        # GROQ LLM INITIALIZATION
         # ----------------------------------
-        if self.config["llm_provider"].lower() != "ollama":
+
+        groq_api_key = os.getenv("GROQ_API_KEY")
+
+        if not groq_api_key:
             raise RuntimeError(
-                "Only Ollama is supported in FREE mode. "
-                "Set llm_provider='ollama' in default_config.py"
+                "GROQ_API_KEY not found. Please set it using:\n"
+                "export GROQ_API_KEY=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"
             )
 
-        self.deep_thinking_llm = ChatOllama(
+        self.deep_thinking_llm = ChatGroq(
             model=self.config["deep_think_llm"],
-            base_url=self.config["backend_url"],
             temperature=0.2,
+            groq_api_key=groq_api_key,
         )
 
-        self.quick_thinking_llm = ChatOllama(
+        self.quick_thinking_llm = ChatGroq(
             model=self.config["quick_think_llm"],
-            base_url=self.config["backend_url"],
             temperature=0.2,
+            groq_api_key=groq_api_key,
         )
 
         # ----------------------------------
         # MEMORY
         # ----------------------------------
+
         self.bull_memory = FinancialSituationMemory("bull_memory", self.config)
         self.bear_memory = FinancialSituationMemory("bear_memory", self.config)
         self.trader_memory = FinancialSituationMemory("trader_memory", self.config)
-        self.invest_judge_memory = FinancialSituationMemory("invest_judge_memory", self.config)
-        self.risk_manager_memory = FinancialSituationMemory("risk_manager_memory", self.config)
+        self.invest_judge_memory = FinancialSituationMemory(
+            "invest_judge_memory", self.config
+        )
+        self.risk_manager_memory = FinancialSituationMemory(
+            "risk_manager_memory", self.config
+        )
 
         # ----------------------------------
         # GRAPH COMPONENTS
         # ----------------------------------
+
         self.conditional_logic = ConditionalLogic()
 
         self.graph_setup = GraphSetup(
@@ -113,6 +122,7 @@ class TradingAgentsGraph:
     # ==================================================
     # SAFE SERIALIZATION
     # ==================================================
+
     def _serialize_state(self, obj):
 
         if isinstance(obj, list):
@@ -129,6 +139,7 @@ class TradingAgentsGraph:
     # ==================================================
     # RUN GRAPH (STREAMING + REAL TIME DB SAVE)
     # ==================================================
+
     def propagate(self, company_name: str, trade_date: str):
 
         self.ticker = validate_nifty50_symbol(company_name)
@@ -153,9 +164,7 @@ class TradingAgentsGraph:
 
             final_state = chunk
 
-            # -----------------------------
             # MARKET REPORT
-            # -----------------------------
             if chunk.get("market_report") and not saved_flags["market"]:
                 save_agent_output(
                     self.ticker,
@@ -165,9 +174,7 @@ class TradingAgentsGraph:
                 )
                 saved_flags["market"] = True
 
-            # -----------------------------
             # FUNDAMENTALS REPORT
-            # -----------------------------
             if chunk.get("fundamentals_report") and not saved_flags["fundamentals"]:
                 save_agent_output(
                     self.ticker,
@@ -177,9 +184,7 @@ class TradingAgentsGraph:
                 )
                 saved_flags["fundamentals"] = True
 
-            # -----------------------------
             # NEWS REPORT
-            # -----------------------------
             if chunk.get("news_report") and not saved_flags["news"]:
                 save_agent_output(
                     self.ticker,
@@ -189,9 +194,7 @@ class TradingAgentsGraph:
                 )
                 saved_flags["news"] = True
 
-            # -----------------------------
-            # SOCIAL / SENTIMENT REPORT
-            # -----------------------------
+            # SOCIAL SENTIMENT REPORT
             if chunk.get("sentiment_report") and not saved_flags["social"]:
                 save_agent_output(
                     self.ticker,
@@ -212,6 +215,7 @@ class TradingAgentsGraph:
     # ==================================================
     # LOGGING
     # ==================================================
+
     def _log_state(self, trade_date, final_state):
 
         self.log_states_dict[str(trade_date)] = final_state
@@ -231,6 +235,7 @@ class TradingAgentsGraph:
     # ==================================================
     # LEARNING
     # ==================================================
+
     def reflect_and_remember(self, returns_losses):
 
         self.reflector.reflect_bull_researcher(
@@ -252,6 +257,10 @@ class TradingAgentsGraph:
         self.reflector.reflect_risk_manager(
             self.curr_state, returns_losses, self.risk_manager_memory
         )
+
+    # ==================================================
+    # SIGNAL PROCESSING
+    # ==================================================
 
     def process_signal(self, full_signal):
         return self.signal_processor.process_signal(full_signal)

@@ -15,10 +15,10 @@ from tradingagents.dataflows.selector import select_nifty50_company
 config = copy.deepcopy(DEFAULT_CONFIG)
 
 # ----- FORCE FREE + LOCAL LLM (OLLAMA) -----
-config["llm_provider"] = "ollama"
+config["llm_provider"] = "groq"
 config["backend_url"] = "http://localhost:11434"
-config["deep_think_llm"] = "phi3:latest"
-config["quick_think_llm"] = "phi3:latest"
+config["deep_think_llm"] = "llama-3.1-70b-versatile"
+config["quick_think_llm"] = "llama-3.1-8b-instant"
 
 # ----- PROJECT PATHS -----
 config["project_dir"] = "."
