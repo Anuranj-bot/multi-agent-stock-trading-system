@@ -62,7 +62,7 @@ class TradingAgentsGraph:
         if not groq_api_key:
             raise RuntimeError(
                 "GROQ_API_KEY not found. Please set it using:\n"
-                "export GROQ_API_KEY=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"
+                "export GROQ_API_KEY= your_api_key "
             )
 
         self.deep_thinking_llm = ChatGroq(
